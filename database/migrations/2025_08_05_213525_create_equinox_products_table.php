@@ -6,23 +6,35 @@ use Illuminate\Support\Facades\Schema;
 
 class CreateEquinoxProductsTable extends Migration
 {
-    public function up()
+    public function up(): void
     {
         Schema::create('equinox_products', function (Blueprint $table) {
             $table->id();
-            $table->string('equinox_id')->unique();
-            $table->string('sku')->nullable()->index();
-            $table->string('mpn')->nullable();
-            $table->string('name');
+
+            // External identifiers
+            $table->string('equinox_id', 64)->unique()->index();
+            $table->string('sku', 100)->nullable()->index();
+            $table->string('mpn', 150)->nullable()->index();
+
+            // Descriptive
+            $table->string('name', 255)->index();
             $table->text('description')->nullable();
-            $table->decimal('base_price', 15, 4);
-            $table->timestamp('last_updated')->nullable();
+
+            // Pricing
+            $table->decimal('base_price', 15, 4)->default(0);
+
+            // Sync/meta
+            $table->timestamp('last_updated')->nullable()->index();
             $table->json('metadata')->nullable();
+
             $table->timestamps();
+
+            // If you need to enforce uniqueness across vendor/sku, uncomment:
+            // $table->unique(['sku', 'equinox_id']);
         });
     }
 
-    public function down()
+    public function down(): void
     {
         Schema::dropIfExists('equinox_products');
     }
