@@ -3,17 +3,14 @@
 namespace App\Jobs;
 
 use App\Models\Product;
-use App\Models\Branch;
-use App\Models\Stock;
-use App\Services\EquinoxClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Throwable;
+use App\Services\EquinoxClient;
+use Illuminate\Support\Arr;
 
 class SyncEquinoxProducts implements ShouldQueue
 {
@@ -24,43 +21,32 @@ class SyncEquinoxProducts implements ShouldQueue
 
     public function handle(EquinoxClient $api): void
     {
-        DB::transaction(function () use ($api) {
-            foreach ($api->paginate('products', 200) as $page) {
-                foreach ($page as $row) {
-                    /** Map JSON -> DB columns (adjust to your schema) */
-                    $p = Product::updateOrCreate(
-                        ['equinox_id' => $row['id']],
-                        [
-                            'sku' => $row['code'] ?? null,
-                            'name' => $row['name'] ?? '',
-                            'description' => $row['description'] ?? null,
-                            'price' => (float) ($row['price'] ?? 0),
-                            'brand' => $row['brand'] ?? null,
-                            'uom' => $row['uom'] ?? null,
-                            'vat_rate' => (float) ($row['vat_rate'] ?? 0),
-                            'is_active' => (bool) ($row['active'] ?? true),
-                        ]
-                    );
+        foreach ($api->paginate('products', 200) as $items) {     // products[] has: id, sku, description, mpn, lastUpdated, retailPrice
+            foreach (array_chunk($items, 100) as $chunk) {
+                DB::transaction(function () use ($chunk) {
+                    foreach ($chunk as $row) {
+                        $extId = (string) ($row['id'] ?? '');
+                        if ($extId === '')
+                            continue;
 
-                    // stock per branch if present
-                    foreach (($row['stock'] ?? []) as $s) {
-                        $branch = Branch::firstOrCreate(['id' => $s['branch_id']], [
-                            'name' => $s['branch_name'] ?? ('Branch '.$s['branch_id']),
-                            'is_active' => true,
-                        ]);
-                        Stock::updateOrCreate(
-                            ['product_id' => $p->id, 'branch_id' => $branch->id],
-                            ['stock' => (int) ($s['on_hand'] ?? $s['qty'] ?? 0),
-                                'unprocessed_order_qty' => (int) ($s['allocated'] ?? 0)]
+                        Product::updateOrCreate(
+                            ['equinox_id' => $extId],
+                            [
+                                'sku' => $row['sku'] ?? null,
+                                'mpn' => $row['mpn'] ?? null,
+                                // Equinox example has no "name"; use description for display name
+                                'name' => $row['description'] ?? ($row['sku'] ?? 'Unnamed'),
+                                'description' => $row['description'] ?? null,
+                                'base_price' => (float) ($row['retailPrice'] ?? 0), // retailPrice in JSON
+                                'last_updated' => ! empty($row['lastUpdated']) ? $row['lastUpdated'] : null,
+                                'metadata' => $row,
+                                'is_active' => true,
+                            ]
                         );
                     }
-                }
+                }, 1);
             }
-        }, 3);
-    }
-
-    public function failed(Throwable $e): void
-    {
-        report($e);
+        }
+        cache()->tags(['products'])->flush();
     }
 }
