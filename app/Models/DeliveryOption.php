@@ -9,6 +9,8 @@ class DeliveryOption extends Model
 {
     use HasFactory;
 
+    protected $table = 'delivery_options';
+
     protected $fillable = [
         'branch_id',
         'name',

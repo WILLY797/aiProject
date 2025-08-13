@@ -9,6 +9,8 @@ class Quote extends Model
 {
     use HasFactory;
 
+    protected $table = 'equinox_quotes';
+
     protected $fillable = [
         'user_id',
         'account_id',

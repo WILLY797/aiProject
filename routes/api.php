@@ -146,3 +146,113 @@ Route::middleware(['auth:sanctum', 'throttle:30,1'])->post('/orders', function (
         return response()->json(['ok' => false, 'error' => 'Failed to submit order to Equinox'], 502);
     }
 })->name('api.orders.store');
+
+/** -------------------- Business Management APIs -------------------- */
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+    // Orders API
+    Route::get('/orders', function (Request $request) {
+        return Order::with('user')
+            ->when($request->status, fn ($q) => $q->where('status', $request->status))
+            ->latest()
+            ->paginate(20);
+    })->name('api.orders.index');
+
+    Route::get('/orders/{id}', function ($id) {
+        return Order::with('user')->findOrFail($id);
+    })->name('api.orders.show');
+
+    // Invoices API (from Equinox sync)
+    Route::get('/invoices', function (Request $request, EquinoxClient $api) {
+        try {
+            return $api->get('invoices', [
+                'page' => $request->get('page', 1),
+                'limit' => $request->get('limit', 20),
+                'search' => $request->get('search'),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to fetch invoices'], 500);
+        }
+    })->name('api.invoices.index');
+
+    Route::get('/invoices/{id}', function ($id, EquinoxClient $api) {
+        try {
+            return $api->get("invoices/{$id}");
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Invoice not found'], 404);
+        }
+    })->name('api.invoices.show');
+
+    // Quotes API (from Equinox sync)
+    Route::get('/quotes', function (Request $request, EquinoxClient $api) {
+        try {
+            return $api->get('quotes', [
+                'page' => $request->get('page', 1),
+                'limit' => $request->get('limit', 20),
+                'search' => $request->get('search'),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to fetch quotes'], 500);
+        }
+    })->name('api.quotes.index');
+
+    Route::get('/quotes/{id}', function ($id, EquinoxClient $api) {
+        try {
+            return $api->get("quotes/{$id}");
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Quote not found'], 404);
+        }
+    })->name('api.quotes.show');
+
+    // Customers API (from Equinox sync)
+    Route::get('/customers', function (Request $request, EquinoxClient $api) {
+        try {
+            return $api->get('customers', [
+                'page' => $request->get('page', 1),
+                'limit' => $request->get('limit', 20),
+                'search' => $request->get('search'),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to fetch customers'], 500);
+        }
+    })->name('api.customers.index');
+
+    Route::get('/customers/{id}', function ($id, EquinoxClient $api) {
+        try {
+            return $api->get("customers/{$id}");
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Customer not found'], 404);
+        }
+    })->name('api.customers.show');
+
+    // Order statistics
+    Route::get('/stats/orders', function () {
+        return [
+            'total' => Order::count(),
+            'pending' => Order::where('status', 'pending')->count(),
+            'processing' => Order::where('status', 'processing')->count(),
+            'shipped' => Order::where('status', 'shipped')->count(),
+            'delivered' => Order::where('status', 'delivered')->count(),
+        ];
+    })->name('api.stats.orders');
+});
+
+/** -------------------- AI Services -------------------- */
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->prefix('ai')->group(function () {
+    Route::get('/status', [App\Http\Controllers\AiController::class, 'status'])->name('api.ai.status');
+    Route::post('/process', [App\Http\Controllers\AiController::class, 'process'])->name('api.ai.process');
+    Route::post('/handle', [App\Http\Controllers\AiController::class, 'handle'])->name('api.ai.handle'); // Legacy
+
+    // Product AI features
+    Route::post('/products/{product_id}/description', [App\Http\Controllers\AiController::class, 'generateProductDescription'])->name('api.ai.product.description');
+    Route::post('/products/{product_id}/classify', [App\Http\Controllers\AiController::class, 'classifyProduct'])->name('api.ai.product.classify');
+
+    // Customer AI features
+    Route::post('/customers/{customer_id}/analyze', [App\Http\Controllers\AiController::class, 'analyzeCustomer'])->name('api.ai.customer.analyze');
+    Route::post('/customers/{customer_id}/recommendations', [App\Http\Controllers\AiController::class, 'recommendProducts'])->name('api.ai.customer.recommendations');
+
+    // Order analysis
+    Route::post('/orders/analyze', [App\Http\Controllers\AiController::class, 'analyzeOrders'])->name('api.ai.orders.analyze');
+
+    // Search features
+    Route::post('/search/suggestions', [App\Http\Controllers\AiController::class, 'searchSuggestions'])->name('api.ai.search.suggestions');
+});

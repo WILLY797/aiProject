@@ -9,6 +9,8 @@ class Invoice extends Model
 {
     use HasFactory;
 
+    protected $table = 'equinox_invoices';
+
     protected $fillable = [
         'order_id',
         'account_id',

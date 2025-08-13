@@ -9,6 +9,8 @@ class Order extends Model
 {
     use HasFactory;
 
+    protected $table = 'equinox_orders';
+
     protected $fillable = [
         'user_id',
         'account_id',
